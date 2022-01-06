@@ -1,0 +1,138 @@
+<head>
+  <link rel="icon" type="image/png" href="https://img.icons8.com/ios/50/000000/line-chart--v2.png>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://code.highcharts.com/stock/highstock.js"></script>
+  <style>
+    body {
+      min-width: 310px;
+    	max-width: 800px;
+    	height: 400px;
+      margin: 0 auto;
+    }
+    h2 {
+      font-family: Arial;
+      font-size: 2.5rem;
+      text-align: center;
+      color: rgb(192, 216, 250);
+      margin-top: 50px
+    }
+  </style>
+</head>
+
+<body style="background-color: #dbd1d1; background-image: url(https://www.formel-zeitarbeit.de/wp-content/uploads/2016/06/ble-background.jpg);">
+  <h2>Unser DHT22</h2>
+  <div id="chart" class="container"></div>
+  <button onclick="download()" style="margin-top: 20px">Download Log</button>
+</body>
+
+<script>
+var chartT;
+setup_chart();
+init_data();
+
+function setup_chart() {
+  chartT = new Highcharts.Chart({
+  chart:{
+    renderTo: 'chart',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  title: { text: 'Messung' },
+  series: [{
+      name: "Temperature",
+      color: '#ff3399'
+    },
+    {
+      name: 'Humidity',
+      color: '#059e8a'
+  }],
+  plotOptions: {
+    line: { animation: false,
+      dataLabels: { enabled: true }
+    },
+    series: { color: '#059e8a' }
+  },
+  xAxis: { type: 'datetime',
+    dateTimeLabelFormats: { second: '%H:%M:%S' },
+    scrollbar: { enabled: true }
+  },
+  yAxis: {
+    title: { text: 'Temperature (Celsius) / Humidity (%)' }
+  },
+  credits: { enabled: false }
+});
+}
+
+function get_log(name) {
+  let value
+  let xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      let log = JSON.parse(this.responseText);
+      console.log(log);
+      if (name in log) {
+        value = log[name];
+      }
+    }
+  };
+  xhttp.open("GET", "/"+name, false);
+  xhttp.send();
+  return value
+}
+
+function download() {
+  console.log("Download")
+  let time = get_log("timestamp_log");
+  let temp = get_log("temperature_log");
+  let humi = get_log("humidity_log");
+  
+  var csv = 'timestamp,temperature,humidity\n';
+  for (i = 0; i < time.length; i += 1) {
+    csv += time[i]+","+temp[i]+","+humi[i]
+    csv += "\n";
+  }
+
+  console.log(csv);
+  var hiddenElement = document.createElement('a');
+  hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+  hiddenElement.target = '_blank';
+  hiddenElement.download = 'dht22_measurement.csv';
+  hiddenElement.click();
+}
+
+// init old data
+function init_data() {
+  let time = get_log("timestamp_log");
+  let temp = get_log("temperature_log");
+  let humi = get_log("humidity_log");
+
+  var data1 = time.map(function(t, i) {return [t*1000, temp[i]];});
+  var data2 = time.map(function(t, i) {return [t*1000, humi[i]];});
+  chartT.xAxis[0].setExtremes((time[-1]-30*60)*1000, time[-1], false);
+  chartT.series[0].setData(data1.reverse());
+  chartT.series[1].setData(data2.reverse());
+}
+
+// poll for new Data
+setInterval(function ( ) {
+  let xhttp = new XMLHttpRequest();
+
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      let data = JSON.parse(this.responseText);
+      console.log(data)
+      let time = data["timestamp"]*1000
+      let temp = parseFloat(data["temperature"]);
+      let humi = parseFloat(data["humidity"]);
+      
+      chartT.xAxis[0].setExtremes(time-30*60*1000, time, false)
+      chartT.series[0].addPoint([time, temp], true, false, true);
+      chartT.series[1].addPoint([time, humi], true, false, true);
+    }
+  };
+
+  xhttp.open("GET", "/now", true);
+  xhttp.send();
+}, 5000 );
+
+</script>
+</html>
